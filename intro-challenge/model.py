@@ -1,4 +1,7 @@
 import pandas as pd
+import seaborn as sns
+from keras.callbacks import EarlyStopping
+from matplotlib import pyplot as plt
 from sklearn.impute import KNNImputer
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
@@ -155,11 +158,40 @@ model = Model(inputs=[aorta_input, brachial_input], outputs=output)
 model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
 # Train the model
-history = model.fit([X_train_aorta_reshaped, X_train_brachial_reshaped], y_train, epochs=30, batch_size=32, validation_data=([X_val_aorta_reshaped, X_val_brachial_reshaped], y_val))
+early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
+
+history = model.fit(
+    [X_train_aorta_reshaped, X_train_brachial_reshaped],
+    y_train,
+    epochs=50,
+    batch_size=32,
+    validation_data=([X_val_aorta_reshaped, X_val_brachial_reshaped], y_val),
+    callbacks=[early_stopping]
+)
 
 
 val_loss, val_accuracy = model.evaluate([X_val_aorta_reshaped, X_val_brachial_reshaped], y_val)
 print(f'Validation Accuracy: {val_accuracy:.4f}')
+
+val_predictions = model.predict([X_val_aorta_reshaped, X_val_brachial_reshaped])
+
+# Convert predictions to encoded class (integer values)
+predicted_classes = np.argmax(val_predictions, axis=1)
+
+# Generate the confusion matrix
+cm = confusion_matrix(y_val, predicted_classes)
+
+# Print the confusion matrix
+print("Confusion Matrix:")
+print(cm)
+
+# Visualize the confusion matrix using seaborn
+plt.figure(figsize=(8, 6))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=np.unique(predicted_classes), yticklabels=np.unique(predicted_classes))
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.title('Confusion Matrix')
+plt.show()
 
 # Handle missing values in the test set, similar to the training set
 aorta_test_df = handle_nans_knn(aorta_test_df, 'Aorta Test Dataset')
