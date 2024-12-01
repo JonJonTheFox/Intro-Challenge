@@ -1,5 +1,6 @@
 import pandas as pd
 from sklearn.impute import KNNImputer
+from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import LSTM, Dense, Dropout, Input, Concatenate
@@ -24,6 +25,50 @@ def handle_nans_knn(df, dataset_name, n_neighbors=5):
 
     return df_imputed
 
+def add_median_difference(df_aorta, df_brachial):
+    # Compute the median for each row in both datasets
+    aorta_medians = df_aorta.median(axis=1)
+    brachial_medians = df_brachial.median(axis=1)
+
+    # Calculate the difference between the median values of brachial and aorta for each row
+    median_difference = brachial_medians - aorta_medians
+
+    # Add the difference as a new feature to both dataframes
+    df_aorta['median_difference'] = median_difference
+    df_brachial['median_difference'] = median_difference
+
+    return df_aorta, df_brachial
+
+def add_pressure_std(df_aorta, df_brachial):
+    df_aorta['pressure_std'] = df_aorta.std(axis=1)
+    df_brachial['pressure_std'] = df_brachial.std(axis=1)
+    return df_aorta, df_brachial
+
+def add_max_min_pressure(df_aorta, df_brachial):
+    df_aorta['max_pressure'] = df_aorta.max(axis=1)
+    df_brachial['max_pressure'] = df_brachial.max(axis=1)
+    df_aorta['min_pressure'] = df_aorta.min(axis=1)
+    df_brachial['min_pressure'] = df_brachial.min(axis=1)
+    return df_aorta, df_brachial
+
+def add_pressure_ratio(df_aorta, df_brachial):
+    df_aorta['pressure_ratio'] = df_brachial.mean(axis=1) / df_aorta.mean(axis=1)
+    return df_aorta, df_brachial
+
+def add_vascular_health_index(df_aorta, df_brachial):
+    df_aorta['vascular_health_index'] = 0.5 * df_aorta['median_difference'] + 0.3 * df_aorta['pressure_std']
+    df_brachial['vascular_health_index'] = 0.5 * df_brachial['median_difference'] + 0.3 * df_brachial['pressure_std']
+    return df_aorta, df_brachial
+
+def add_moving_average_pressure(df_aorta, df_brachial, window_size=3):
+    df_aorta['moving_avg'] = df_aorta.rolling(window=window_size, axis=1).mean().mean(axis=1)
+    df_brachial['moving_avg'] = df_brachial.rolling(window=window_size, axis=1).mean().mean(axis=1)
+    return df_aorta, df_brachial
+
+
+
+
+
 
 # Load your datasets
 aorta_df = pd.read_csv('aortaP_train_data.csv')
@@ -32,6 +77,26 @@ brachial_df = pd.read_csv('brachP_train_data.csv')
 # Handle NaNs using derivative-based approximation
 aorta_df = handle_nans_knn(aorta_df, 'Aorta Dataset')
 brachial_df = handle_nans_knn(brachial_df, 'Brachial Dataset')
+
+aorta_df, brachial_df = add_median_difference(aorta_df, brachial_df)
+
+aorta_df, brachial_df = add_pressure_std(aorta_df, brachial_df)
+aorta_test_df, brachial_test_df = add_pressure_std(aorta_test_df, brachial_test_df)
+# Apply to the test datasets
+aorta_test_df, brachial_test_df = add_median_difference(aorta_test_df, brachial_test_df)
+
+
+aorta_df, brachial_df = add_max_min_pressure(aorta_df, brachial_df)
+aorta_test_df, brachial_test_df = add_max_min_pressure(aorta_test_df, brachial_test_df)
+
+aorta_df, brachial_df = add_vascular_health_index(aorta_df, brachial_df)
+aorta_test_df, brachial_test_df = add_vascular_health_index(aorta_test_df, brachial_test_df)
+
+aorta_df, brachial_df = add_pressure_ratio(aorta_df, brachial_df)
+aorta_test_df, brachial_test_df = add_pressure_ratio(aorta_test_df, brachial_test_df)
+
+aorta_df, brachial_df = add_moving_average_pressure(aorta_df, brachial_df)
+aorta_test_df, brachial_test_df = add_moving_average_pressure(aorta_test_df, brachial_test_df)
 
 # Print the updated dataframes to check the changes
 print(aorta_df.head())
@@ -90,9 +155,9 @@ model = Model(inputs=[aorta_input, brachial_input], outputs=output)
 model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
 # Train the model
-history = model.fit([X_train_aorta_reshaped, X_train_brachial_reshaped], y_train, epochs=20, batch_size=32, validation_data=([X_val_aorta_reshaped, X_val_brachial_reshaped], y_val))
+history = model.fit([X_train_aorta_reshaped, X_train_brachial_reshaped], y_train, epochs=30, batch_size=32, validation_data=([X_val_aorta_reshaped, X_val_brachial_reshaped], y_val))
 
-# Evaluate the model
+
 val_loss, val_accuracy = model.evaluate([X_val_aorta_reshaped, X_val_brachial_reshaped], y_val)
 print(f'Validation Accuracy: {val_accuracy:.4f}')
 

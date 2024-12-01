@@ -5,6 +5,7 @@
 
 
 import pandas as pd
+from sklearn.impute import KNNImputer
 
 # Load the datasets
 aorta_df = pd.read_csv('aortaP_test_data.csv')
@@ -88,9 +89,39 @@ import matplotlib.pyplot as plt
 aorta_df = pd.read_csv('aortaP_train_data.csv')
 brachial_df = pd.read_csv('brachP_train_data.csv')
 
-# Fill missing values with the median of each column
-aorta_df = aorta_df.apply(lambda col: col.fillna(col.median()), axis=0)
-brachial_df = brachial_df.apply(lambda col: col.fillna(col.median()), axis=0)
+
+def handle_nans_knn(df, dataset_name, n_neighbors=5):
+    # Create a KNN imputer instance with specified number of neighbors
+    knn_imputer = KNNImputer(n_neighbors=n_neighbors)
+
+    # Perform the imputation
+    df_imputed = pd.DataFrame(knn_imputer.fit_transform(df), columns=df.columns)
+
+    # Count the number of NaNs after imputation to verify
+    nan_count_after = df_imputed.isna().sum().sum()
+    print(f"{dataset_name} - Total NaNs after KNN imputation: {nan_count_after}")
+
+    return df_imputed
+
+aorta_df = handle_nans_knn(aorta_df, 'Aorta Dataset')
+brachial_df = handle_nans_knn(brachial_df, 'Brachial Dataset')
+
+# Plot waveforms for multiple subjects (e.g., first 5 subjects)
+plt.figure(figsize=(12, 10))
+
+for i in range(5):  # First 5 subjects
+    plt.subplot(5, 2, 2*i + 1)
+    plt.plot(aorta_df.iloc[i, :], label=f"Subject {i} Aorta")
+    plt.title(f"Aorta Pressure - Subject {i}")
+    plt.grid(True)
+
+    plt.subplot(5, 2, 2*i + 2)
+    plt.plot(brachial_df.iloc[i, :], label=f"Subject {i} Brachial", color='orange')
+    plt.title(f"Brachial Pressure - Subject {i}")
+    plt.grid(True)
+
+plt.tight_layout()
+plt.show()
 
 # Calculate the median pressure for each subject (across all columns)
 aorta_median = aorta_df.median(axis=1)  # Median for each subject
